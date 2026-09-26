@@ -27,13 +27,6 @@ async function ensureOk(res) {
   throw new ApiError(body.error || `Erro ${res.status}`, { status: res.status, code: body.code });
 }
 
-export async function transcribe(blob, filename) {
-  const form = new FormData();
-  form.append('file', blob, filename);
-  const res = await ensureOk(await fetch('/api/transcribe', { method: 'POST', headers: headers(), body: form }));
-  return (await res.json()).text;
-}
-
 // Faz o pedido ao professor e chama onDelta(textoAcumulado) a cada pedaço recebido.
 export async function chatStream({ vars, messages, onDelta, signal }) {
   const res = await ensureOk(

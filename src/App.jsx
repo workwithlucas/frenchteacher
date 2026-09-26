@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PROFILES, loadProgress, saveProgress, loadSession, saveSession, loadLastProfileId, saveLastProfileId, loadAccessCode, saveAccessCode } from './lib/storage.js';
-import { ApiError, transcribe, summarize } from './lib/api.js';
-import { Recorder, openMicrophone, closeMicrophone } from './lib/recorder.js';
+import { ApiError, summarize } from './lib/api.js';
+import { LANGS, Listener, isSpeechRecognitionSupported } from './lib/speech.js';
 import { Speaker } from './lib/speaker.js';
 import { runTeacherTurn } from './lib/teacherTurn.js';
 import { getBlock, describeBlock } from '../shared/curriculum.js';
 import { SESSION_OPENER } from '../shared/teacherPrompt.js';
 import { applySessionSummary, nivelAtual, recurringErrors, teacherPromptVars } from '../shared/progress.js';
 
-const MIN_RECORDING_MS = 600;
+const UNSUPPORTED_MESSAGE =
+  'Este navegador não tem reconhecimento de voz nativo, então não dá para falar com o professor por aqui. Use o Chrome (Android ou computador) ou o Edge.';
 
 // Um único Speaker para o app todo: é destravado no toque de "Iniciar sessão".
 let speakerSingleton = null;
@@ -180,9 +181,15 @@ function ProfileHome({ profile, onSwitch }) {
         </div>
       </section>
 
+      {!isSpeechRecognitionSupported() && (
+        <p className="error" role="alert">
+          {UNSUPPORTED_MESSAGE}
+        </p>
+      )}
+
       {session ? (
         <div className="actions">
-          <button className="btn big primary" onClick={start}>
+          <button className="btn big primary" onClick={start} disabled={!isSpeechRecognitionSupported()}>
             Continuar sessão em andamento
           </button>
           <button className="link danger" onClick={discard}>
@@ -191,7 +198,7 @@ function ProfileHome({ profile, onSwitch }) {
         </div>
       ) : (
         <div className="actions">
-          <button className="btn big primary" onClick={start}>
+          <button className="btn big primary" onClick={start} disabled={!isSpeechRecognitionSupported()}>
             Iniciar sessão
           </button>
         </div>
@@ -230,8 +237,7 @@ function SummaryCard({ result }) {
 
 const PHASE_LABEL = {
   idle: 'Toque no microfone para falar',
-  listening: 'Ouvindo… toque de novo para enviar',
-  transcribing: 'Transcrevendo…',
+  listening: 'Ouvindo… envia sozinho quando você parar (ou toque para enviar)',
   thinking: 'Professor pensando…',
   speaking: 'Professor falando… (toque para interromper e falar)',
   ending: 'Gerando resumo da sessão…',
@@ -245,11 +251,11 @@ function SessionView({ profile, progress, initialSession, onClose }) {
   const [liveText, setLiveText] = useState('');
   const [error, setError] = useState(null);
   const [retry, setRetry] = useState(null);
-  const [elapsed, setElapsed] = useState(0);
+  const [lang, setLang] = useState('fr');
+  const [heardText, setHeardText] = useState('');
 
   const speaker = getSpeaker();
-  const micRef = useRef(null);
-  const recorderRef = useRef(null);
+  const listenerRef = useRef(null);
   const listRef = useRef(null);
 
   const persist = (next) => {
@@ -274,8 +280,7 @@ function SessionView({ profile, progress, initialSession, onClose }) {
       speaker.stop();
       speaker.onSpeakingChange = () => {};
       speaker.onError = () => {};
-      recorderRef.current?.cancel();
-      closeMicrophone(micRef.current);
+      listenerRef.current?.cancel();
       wakeLock?.release().catch(() => {});
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -297,14 +302,7 @@ function SessionView({ profile, progress, initialSession, onClose }) {
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' });
-  }, [session.messages.length, liveText]);
-
-  useEffect(() => {
-    if (phase !== 'listening') return;
-    const t0 = Date.now();
-    const id = setInterval(() => setElapsed(Math.floor((Date.now() - t0) / 1000)), 250);
-    return () => clearInterval(id);
-  }, [phase]);
+  }, [session.messages.length, liveText, heardText]);
 
   async function teacherTurn(msgs) {
     persist({ ...sessionRef.current, messages: msgs });
@@ -333,46 +331,44 @@ function SessionView({ profile, progress, initialSession, onClose }) {
     }
   }
 
-  async function ensureMic() {
-    if (micRef.current?.active) return micRef.current;
-    micRef.current = await openMicrophone();
-    return micRef.current;
-  }
-
-  async function onMic() {
-    if (phase === 'listening') return finishRecording();
+  function onMic() {
+    if (phase === 'listening') return listenerRef.current?.finish();
     if (phase !== 'idle') return;
     speaker.stop(); // aluno interrompe o professor
     setError(null);
+    setHeardText('');
     try {
-      const stream = await ensureMic();
-      recorderRef.current = new Recorder(stream);
-      recorderRef.current.start();
-      setElapsed(0);
+      const listener = new Listener({
+        lang: LANGS[lang].code,
+        onInterim: setHeardText,
+        onFinal: (text) => {
+          listenerRef.current = null;
+          setHeardText('');
+          setLang('fr'); // o seletor volta para francês depois de cada fala
+          if (!text) {
+            setPhase('idle');
+            return fail(new Error('Não ouvi nada. Toque no microfone e fale de novo.'));
+          }
+          sendStudentText(text);
+        },
+        onError: (err) => {
+          listenerRef.current = null;
+          setHeardText('');
+          setPhase('idle');
+          fail(err);
+        },
+      });
+      listenerRef.current = listener;
+      listener.start();
       setPhase('listening');
     } catch (err) {
-      fail(new Error(`Não consegui acessar o microfone: ${err.message}`));
+      listenerRef.current = null;
+      setPhase('idle');
+      fail(err);
     }
   }
 
-  async function finishRecording() {
-    const { blob, filename, durationMs } = await recorderRef.current.stop();
-    if (durationMs < MIN_RECORDING_MS || blob.size === 0) {
-      setPhase('idle');
-      return;
-    }
-    setPhase('transcribing');
-    let text;
-    try {
-      text = await transcribe(blob, filename);
-    } catch (err) {
-      setPhase('idle');
-      return fail(err);
-    }
-    if (!text) {
-      setPhase('idle');
-      return fail(new Error('Não entendi o áudio. Pode falar de novo?'));
-    }
+  function sendStudentText(text) {
     const msgs = [...sessionRef.current.messages];
     const last = msgs[msgs.length - 1];
     // Se a resposta anterior do professor falhou, junta a nova fala à anterior.
@@ -381,14 +377,14 @@ function SessionView({ profile, progress, initialSession, onClose }) {
     } else {
       msgs.push({ role: 'user', content: text });
     }
-    await teacherTurn(msgs);
+    return teacherTurn(msgs);
   }
 
   async function endSession() {
     speaker.stop();
-    recorderRef.current?.cancel();
-    closeMicrophone(micRef.current);
-    micRef.current = null;
+    listenerRef.current?.cancel();
+    listenerRef.current = null;
+    setHeardText('');
 
     const current = sessionRef.current;
     const visible = current.messages.filter((m) => !m.hidden);
@@ -422,7 +418,8 @@ function SessionView({ profile, progress, initialSession, onClose }) {
   }
 
   const status = phase === 'idle' && speaking ? 'speaking' : phase;
-  const busy = ['transcribing', 'thinking', 'ending'].includes(phase);
+  const busy = ['thinking', 'ending'].includes(phase);
+  const supported = isSpeechRecognitionSupported();
   const visibleMessages = useMemo(() => session.messages.filter((m) => !m.hidden), [session.messages]);
 
   return (
@@ -442,6 +439,7 @@ function SessionView({ profile, progress, initialSession, onClose }) {
             {m.display ?? m.content}
           </p>
         ))}
+        {heardText && <p className="bubble user live">{heardText}</p>}
         {liveText && <p className="bubble assistant live">{liveText}</p>}
       </div>
 
@@ -460,18 +458,31 @@ function SessionView({ profile, progress, initialSession, onClose }) {
       )}
 
       <footer className="controls">
-        <p className={`status ${status}`}>
-          {PHASE_LABEL[status]}
-          {status === 'listening' && ` ${elapsed}s`}
-        </p>
-        <button
-          className={`mic ${status}`}
-          onClick={onMic}
-          disabled={busy}
-          aria-label={phase === 'listening' ? 'Parar e enviar' : 'Falar'}
-        >
-          <MicIcon />
-        </button>
+        <p className={`status ${status}`}>{supported ? PHASE_LABEL[status] : UNSUPPORTED_MESSAGE}</p>
+        <div className="mic-row">
+          <div className="lang-toggle" role="group" aria-label="Idioma da fala">
+            {Object.entries(LANGS).map(([key, { label }]) => (
+              <button
+                key={key}
+                className={lang === key ? 'on' : ''}
+                aria-pressed={lang === key}
+                onClick={() => setLang(key)}
+                disabled={phase === 'listening'}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <button
+            className={`mic ${status}`}
+            onClick={onMic}
+            disabled={busy || !supported}
+            aria-label={phase === 'listening' ? 'Parar e enviar' : 'Falar'}
+          >
+            <MicIcon />
+          </button>
+          <div className="mic-row-spacer" />
+        </div>
       </footer>
     </main>
   );

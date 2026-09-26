@@ -3,7 +3,6 @@ import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 
 process.env.ANTHROPIC_API_KEY = 'test-anthropic';
-process.env.OPENAI_API_KEY = 'test-openai';
 process.env.FISH_AUDIO_API_KEY = 'test-fish';
 process.env.ANTHROPIC_BASE_URL = 'https://anthropic.test';
 
@@ -20,7 +19,6 @@ globalThis.fetch = async (input, init = {}) => {
 
 const { default: chat } = await import('../netlify/functions/chat.mjs');
 const { default: tts } = await import('../netlify/functions/tts.mjs');
-const { default: transcribe } = await import('../netlify/functions/transcribe.mjs');
 const { default: summarize } = await import('../netlify/functions/summarize.mjs');
 const { teacherPromptVars, createInitialProgress } = await import('../shared/progress.js');
 const { STREAM_ERROR_MARKER } = await import('../shared/protocol.js');
@@ -129,17 +127,6 @@ test('tts: repassa texto e voz ao Fish Audio e devolve mp3', async () => {
   assert.equal(calls[0].init.headers.Authorization, 'Bearer test-fish');
 });
 
-test('transcribe: envia o áudio ao Whisper e devolve o texto', async () => {
-  routes['https://api.openai.com/'] = () => Response.json({ text: ' Je suis allé au marché. ' });
-  const form = new FormData();
-  form.append('file', new Blob([new Uint8Array([1, 2, 3])], { type: 'audio/webm' }), 'fala.webm');
-  const res = await transcribe(new Request('https://app.test/api/transcribe', { method: 'POST', body: form }));
-  assert.deepEqual(await res.json(), { text: 'Je suis allé au marché.' });
-  const sentForm = calls[0].init.body;
-  assert.equal(sentForm.get('model'), 'whisper-1');
-  assert.equal(sentForm.get('file').name, 'fala.webm');
-});
-
 test('summarize: devolve o resumo estruturado', async () => {
   const out = { regra_ensinada: 'Nasais', novos_erros: ['troca un por um'], avancar_bloco: false };
   routes['https://anthropic.test/v1/messages'] = () =>
@@ -154,12 +141,10 @@ test('summarize: devolve o resumo estruturado', async () => {
 });
 
 test('variável de ambiente ausente gera mensagem clara', async () => {
-  const saved = process.env.OPENAI_API_KEY;
-  delete process.env.OPENAI_API_KEY;
-  const form = new FormData();
-  form.append('file', new Blob([new Uint8Array([1])]), 'a.webm');
-  const res = await transcribe(new Request('https://app.test/api/transcribe', { method: 'POST', body: form }));
-  process.env.OPENAI_API_KEY = saved;
+  const saved = process.env.FISH_AUDIO_API_KEY;
+  delete process.env.FISH_AUDIO_API_KEY;
+  const res = await tts(post('/api/tts', { text: 'Bonjour' }));
+  process.env.FISH_AUDIO_API_KEY = saved;
   assert.equal(res.status, 500);
-  assert.match((await res.json()).error, /OPENAI_API_KEY/);
+  assert.match((await res.json()).error, /FISH_AUDIO_API_KEY/);
 });

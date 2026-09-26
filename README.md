@@ -1,7 +1,23 @@
 # Professor de francês (PWA)
 
 App de conversação em francês por voz, com professor de IA seguindo o CECRL.
-Fluxo de cada turno: **falar → Whisper transcreve → Claude responde (streaming) → Fish Audio sintetiza → áudio toca**.
+Fluxo de cada turno: **falar → navegador transcreve em tempo real (Web Speech API) → Claude responde (streaming) → Fish Audio sintetiza → áudio toca**.
+
+## Reconhecimento de fala
+
+O reconhecimento de fala usa a **Web Speech API** do próprio navegador. Não passa pelas nossas
+functions e não tem custo de API.
+
+- A transcrição aparece **enquanto você fala** (resultados interinos).
+- A fala é enviada sozinha depois de ~1,8 s de silêncio. Tocar no microfone envia antes.
+- A escuta é em **francês (`fr-FR`)**. O seletor **FR/PT** ao lado do microfone permite fazer
+  uma fala em português (`pt-BR`), por exemplo "não entendi" ou uma pergunta sobre a regra.
+  Depois de cada fala, o seletor volta para FR.
+- **Navegadores:** funciona no Chrome (Android e computador) e no Edge. O Safari expõe a API,
+  mas ela é menos estável, sobretudo no app instalado na tela de início do iOS. O Firefox não
+  tem suporte. Sem suporte, o app avisa na tela e desativa o botão de falar. Não existe fallback
+  pago.
+- No Chrome, o áudio é processado pelos servidores do Google, então é preciso estar online.
 
 ## Estrutura
 
@@ -18,7 +34,6 @@ Fluxo de cada turno: **falar → Whisper transcreve → Claude responde (streami
 │   ├── progress.js          # estado do aluno, erros recorrentes, tag avancar_bloco, corte de frases p/ TTS
 │   └── protocol.js
 ├── netlify/functions/       # proxy serverless — as chaves de API ficam só aqui
-│   ├── transcribe.mjs       # POST /api/transcribe → OpenAI Whisper
 │   ├── chat.mjs             # POST /api/chat       → Claude (streaming de texto)
 │   ├── tts.mjs              # POST /api/tts        → Fish Audio (mp3)
 │   ├── summarize.mjs        # POST /api/summarize  → Claude (saída estruturada)
@@ -26,7 +41,7 @@ Fluxo de cada turno: **falar → Whisper transcreve → Claude responde (streami
 ├── src/
 │   ├── App.jsx              # telas: perfil → início → sessão → resumo
 │   ├── lib/api.js           # chamadas /api/*
-│   ├── lib/recorder.js      # microfone (MediaRecorder; webm ou mp4 no iOS)
+│   ├── lib/speech.js        # reconhecimento de fala (Web Speech API, fr-FR / pt-BR)
 │   ├── lib/speaker.js       # fila de áudio (toca trecho 1 enquanto sintetiza o 2)
 │   ├── lib/teacherTurn.js   # orquestra um turno do professor
 │   └── lib/storage.js       # localStorage: progresso por perfil, sessão em andamento
@@ -58,7 +73,7 @@ O progresso fica **só no aparelho**. Celular e computador têm progresso separa
 1. No Netlify: **Add new site → Import an existing project → GitHub →** `workwithlucas/frenchteacher`.
    Build command e publish dir já vêm do `netlify.toml`.
 2. **Site configuration → Environment variables**, preencha:
-   - `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `FISH_AUDIO_API_KEY` (obrigatórias)
+   - `ANTHROPIC_API_KEY`, `FISH_AUDIO_API_KEY` (obrigatórias)
    - `APP_ACCESS_CODE`: um código qualquer. O app pede esse código uma vez por aparelho.
      **Sem ele, qualquer pessoa com a URL consegue gastar suas chaves.**
    - `FISH_AUDIO_VOICE_ID`: ID de uma voz francesa escolhida em fish.audio (opcional; sem ele,
@@ -80,7 +95,7 @@ npx netlify dev          # app + functions em http://localhost:8888 (usa o .env)
 
 ## Custos (estimativa aproximada, confira os preços atuais)
 
-Por sessão de ~30 min: Whisper ~US$ 0,06 (≈10 min de fala do aluno), Claude Sonnet 5 ~US$ 0,20–0,40
+Por sessão de ~30 min: reconhecimento de fala sem custo (navegador), Claude Sonnet 5 ~US$ 0,20–0,40
 (o histórico é reenviado a cada turno, com cache de prompt ligado), e Fish Audio ~US$ 0,20–0,30
-(≈15 mil caracteres falados pelo professor). **Total: ~US$ 0,50–0,80 por sessão.**
-Com US$ 50/mês para os dois, isso dá **~60–100 sessões de 30 min por mês no total**.
+(≈15 mil caracteres falados pelo professor). **Total: ~US$ 0,45–0,70 por sessão.**
+Com US$ 50/mês para os dois, isso dá **~70–110 sessões de 30 min por mês no total**.
