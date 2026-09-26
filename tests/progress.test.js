@@ -7,6 +7,7 @@ import {
   applySessionSummary,
   recurringErrors,
   extractAdvanceTag,
+  extractExpectedRepeat,
   safeSpeakLength,
   takeSpeakableChunks,
 } from '../shared/progress.js';
@@ -27,9 +28,19 @@ test('prompt do professor: recusa variável ausente', () => {
 });
 
 test('template contém todas as seções da especificação', () => {
-  for (const s of ['# QUEM VOCÊ É', '# ESTRUTURA FIXA DA SESSÃO', '# REGRAS DE CORREÇÃO', '# LIMITES DE ESCOPO', '# FORMATO DE FALA', '# PROGRESSÃO DE NÍVEL', '# TETO DE AMBIÇÃO']) {
+  for (const s of [
+    '# QUEM VOCÊ É',
+    '# ESTRUTURA FIXA DA SESSÃO',
+    '# REGRAS DE CORREÇÃO',
+    '# LIMITES DE ESCOPO',
+    '# FORMATO DE FALA',
+    '# PROGRESSÃO DE NÍVEL',
+    '# PRÁTICA DE PRONÚNCIA (repetição guiada)',
+    '# TETO DE AMBIÇÃO',
+  ]) {
     assert.ok(TEACHER_PROMPT_TEMPLATE.includes(s), s);
   }
+  assert.match(TEACHER_PROMPT_TEMPLATE, /\{"expectedRepeat": "<texto exato/);
 });
 
 test('currículo: 20 blocos em ordem', () => {
@@ -50,9 +61,39 @@ test('tag avancar_bloco: extrai e remove em vários formatos', () => {
   }
 });
 
-test('streaming: não fala nada a partir do início da tag', () => {
+test('tag expectedRepeat: extrai o texto exato e remove do que é falado/mostrado', () => {
+  const cases = [
+    [
+      'Répète après moi : un bon vin blanc. {"expectedRepeat": "un bon vin blanc"}',
+      'un bon vin blanc',
+      'Répète après moi : un bon vin blanc.',
+    ],
+    [
+      'Diga "bonjour". {"expectedRepeat": "bonjour"}\n{{avancar_bloco: false}}',
+      'bonjour',
+      'Diga "bonjour".',
+    ],
+    ['Vamos conversar livremente hoje.', null, 'Vamos conversar livremente hoje.'],
+  ];
+  for (const [input, value, cleanAfterAdvance] of cases) {
+    const { value: got, clean } = extractExpectedRepeat(input);
+    assert.equal(got, value, input);
+    // O texto limpo ainda pode conter a tag avancar_bloco; junto com extractAdvanceTag dá o texto final.
+    assert.equal(extractAdvanceTag(clean).clean, cleanAfterAdvance, input);
+  }
+});
+
+test('tag expectedRepeat: tag malformada é removida mas não quebra a extração', () => {
+  const { value, clean } = extractExpectedRepeat('Répète. {"expectedRepeat": "un bon vin blanc}');
+  assert.equal(value, null);
+  assert.equal(clean, 'Répète. {"expectedRepeat": "un bon vin blanc}'); // sem "}" de fechamento válido, regex não casa
+});
+
+test('streaming: não fala nada a partir do início de nenhuma das duas tags ocultas', () => {
   assert.equal(safeSpeakLength('Olá. {{avan'), 5);
   assert.equal(safeSpeakLength('Olá. avancar_bloco: tr'), 5);
+  assert.equal(safeSpeakLength('Répète. {"expected'), 8);
+  assert.equal(safeSpeakLength('Répète. expectedRepeat: "x"'), 8);
   assert.equal(safeSpeakLength('Vamos avançar agora.'), 'Vamos avançar agora.'.length);
 });
 

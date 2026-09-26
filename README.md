@@ -1,12 +1,14 @@
 # Professor de francês (PWA)
 
 App de conversação em francês por voz, com professor de IA seguindo o CECRL.
-Fluxo de cada turno: **falar → navegador transcreve em tempo real (Web Speech API) → Claude responde (streaming) → Fish Audio sintetiza → áudio toca**.
+Fluxo de cada turno: **falar → navegador transcreve em tempo real (Web Speech API, ou AssemblyAI
+nos momentos de repetição guiada) → Claude responde (streaming) → Fish Audio sintetiza → áudio
+toca**.
 
 ## Reconhecimento de fala
 
-O reconhecimento de fala usa a **Web Speech API** do próprio navegador. Não passa pelas nossas
-functions e não tem custo de API.
+O reconhecimento de fala usa a **Web Speech API** do próprio navegador na conversa normal. Não
+passa pelas nossas functions e não tem custo de API.
 
 - A transcrição aparece **enquanto você fala** (resultados interinos).
 - A fala é enviada sozinha depois de ~1,8 s de silêncio. Tocar no microfone envia antes.
@@ -18,6 +20,28 @@ functions e não tem custo de API.
   tem suporte. Sem suporte, o app avisa na tela e desativa o botão de falar. Não existe fallback
   pago.
 - No Chrome, o áudio é processado pelos servidores do Google, então é preciso estar online.
+
+### Repetição guiada (pronúncia): AssemblyAI
+
+Quando o professor pede pra repetir uma palavra ou frase específica (comum no Bloco 1, de
+fonética, mas pode acontecer em qualquer nível), a resposta dele carrega uma tag oculta
+`{"expectedRepeat": "<texto esperado>"}` — não falada, não mostrada na tela. A **próxima** fala
+do aluno, se o seletor estiver em FR, é capturada pela **AssemblyAI Universal Streaming**
+(`universal-3-5-pro`) em vez da Web Speech API:
+
+- O navegador pede um token temporário à function `/api/assemblyai-token` (a chave permanente
+  nunca sai do servidor) e abre um WebSocket direto com a AssemblyAI, enviando áudio PCM em
+  tempo real. `expectedRepeat` também vira `keyterms_prompt`, pra reforçar o reconhecimento
+  daquelas palavras específicas.
+- Cada palavra reconhecida vem com uma confiança de 0 a 1. O app calcula a **média** entre as
+  palavras da repetição e identifica a **pior palavra** (menor confiança), e manda os dois como
+  contexto oculto pro professor na próxima resposta — ele decide o que fazer (abaixo de ~0.7 é
+  sugerido no prompt como "merece atenção").
+- Se o seletor estiver em **PT** nesse momento, a fala usa Web Speech API normalmente (é o
+  escape pro aluno falar outra coisa em vez de repetir) — sem captura de pronúncia nesse caso.
+- Fora desses momentos de repetição, tudo continua na Web Speech API, sem tocar na AssemblyAI.
+- Precisa da variável `ASSEMBLYAI_API_KEY` (conta em assemblyai.com); sem ela, só esse tipo de
+  turno falha (com opção de tentar de novo) — o resto do app continua funcionando normalmente.
 
 ## Estrutura
 
@@ -35,6 +59,7 @@ functions e não tem custo de API.
 │   ├── caderno.js           # entradas do Caderno, pergunta pendente, agrupamento, escrita
 │   ├── apoio.js             # vocabulário por nível, provérbio, revisão espaçada
 │   ├── writingPrompt.js     # prompt da correção de escrita
+│   ├── pronunciation.js     # keyterms, média/pior palavra e nota de pronúncia (AssemblyAI)
 │   ├── data/                # vocabulario-frequencia.json, proverbios-expressoes.json (estáticos)
 │   └── protocol.js
 ├── netlify/functions/       # proxy serverless — as chaves de API ficam só aqui
@@ -42,11 +67,13 @@ functions e não tem custo de API.
 │   ├── tts.mjs              # POST /api/tts        → Fish Audio (mp3)
 │   ├── summarize.mjs        # POST /api/summarize  → Claude Haiku (resumo + Caderno, saída estruturada)
 │   ├── correct-writing.mjs  # POST /api/correct-writing → Claude Haiku (correção da escrita)
+│   ├── assemblyai-token.mjs # POST /api/assemblyai-token → token curto (repetição guiada)
 │   └── _lib/                # utilitários (código de acesso, erros, validação)
 ├── src/
 │   ├── App.jsx              # telas: perfil → início → sessão → resumo
 │   ├── lib/api.js           # chamadas /api/*
 │   ├── lib/speech.js        # reconhecimento de fala (Web Speech API, fr-FR / pt-BR)
+│   ├── lib/repeatCapture.js # captura de repetição guiada (AssemblyAI, WebSocket + PCM)
 │   ├── lib/speaker.js       # fila de áudio (toca trecho 1 enquanto sintetiza o 2)
 │   ├── lib/teacherTurn.js   # orquestra um turno do professor
 │   └── lib/storage.js       # localStorage: progresso por perfil, sessão em andamento
@@ -136,6 +163,8 @@ desta fase.
    Build command e publish dir já vêm do `netlify.toml`.
 2. **Site configuration → Environment variables**, preencha:
    - `ANTHROPIC_API_KEY`, `FISH_AUDIO_API_KEY` (obrigatórias)
+   - `ASSEMBLYAI_API_KEY`: só é usada nos turnos de repetição guiada (pronúncia); sem ela,
+     esses turnos falham (com opção de tentar de novo), mas o resto do app continua normal
    - `APP_ACCESS_CODE`: um código qualquer. O app pede esse código uma vez por aparelho.
      **Sem ele, qualquer pessoa com a URL consegue gastar suas chaves.**
    - `FISH_AUDIO_VOICE_ID`: ID de uma voz francesa escolhida em fish.audio (opcional; sem ele,
@@ -163,7 +192,9 @@ Por sessão de ~30 min: reconhecimento de fala sem custo (navegador), Claude Son
 (o histórico é reenviado a cada turno, com cache de prompt ligado), e Fish Audio no modelo
 gratuito `s2.1-pro-free` (sem custo, sem limite rígido de créditos). O encerramento com Caderno
 roda no Haiku e custa ~US$ 0,01–0,03. Vocabulário, provérbio e revisão só aumentam um pouco os
-tokens de entrada, que ficam em cache durante a sessão. **Total: ~US$ 0,20–0,45 por sessão.**
-Cada correção de escrita enviada custa à parte ~US$ 0,01.
-Com US$ 50/mês para os dois, isso dá **~110–250 sessões de 30 min por mês no total** — o
+tokens de entrada, que ficam em cache durante a sessão. AssemblyAI (`universal-3-5-pro`) cobra
+US$ 0,45/hora só do áudio dos momentos de repetição guiada — cada repetição dura poucos segundos,
+então numa sessão de fonética com várias repetições isso fica na casa de US$ 0,01–0,03.
+**Total: ~US$ 0,20–0,48 por sessão.** Cada correção de escrita enviada custa à parte ~US$ 0,01.
+Com US$ 50/mês para os dois, isso dá **~105–250 sessões de 30 min por mês no total** — o
 principal custo real passa a ser o Claude, não mais o TTS.

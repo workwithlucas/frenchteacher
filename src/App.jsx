@@ -14,6 +14,8 @@ import {
 } from './lib/storage.js';
 import { ApiError, correctWriting, summarize } from './lib/api.js';
 import { LANGS, Listener, isSpeechRecognitionSupported } from './lib/speech.js';
+import { RepeatCapture, isRepeatCaptureSupported } from './lib/repeatCapture.js';
+import { pronunciationNote } from '../shared/pronunciation.js';
 import { Speaker } from './lib/speaker.js';
 import { runTeacherTurn } from './lib/teacherTurn.js';
 import { getBlock, describeBlock } from '../shared/curriculum.js';
@@ -135,6 +137,9 @@ function ProfileHome({ profile, onSwitch }) {
         vars: teacherPromptVars(progress),
         blocoId: progress.blocoId,
         lastTag: null,
+        // Texto que o professor acabou de pedir pro aluno repetir (tag expectedRepeat),
+        // se houver — define se a PRÓXIMA fala usa AssemblyAI em vez de Web Speech.
+        pendingRepeat: null,
         // Pergunta aberta pendente da última entrada do Caderno, retomada na abertura.
         perguntaRetomada: pendingQuestion(caderno),
         // Vocabulário do nível, provérbio sugerido e revisão espaçada (se for a vez).
@@ -530,7 +535,7 @@ function SessionView({ profile, progress, initialSession, onClose }) {
     setError(null);
     setRetry(null);
     try {
-      const { raw, clean, advanceTag } = await runTeacherTurn({
+      const { raw, clean, advanceTag, expectedRepeat } = await runTeacherTurn({
         vars: sessionRef.current.vars,
         messages: msgs.map(({ role, content }) => ({ role, content })),
         speaker,
@@ -541,6 +546,9 @@ function SessionView({ profile, progress, initialSession, onClose }) {
         ...sessionRef.current,
         messages: [...msgs, { role: 'assistant', content: raw, display: clean }],
         lastTag: advanceTag ?? sessionRef.current.lastTag,
+        // Vale só pra próxima fala do aluno: se o professor não pediu repetição agora,
+        // limpa (mesmo que tivesse pedido no turno anterior).
+        pendingRepeat: expectedRepeat,
       });
     } catch (err) {
       fail(err, () => teacherTurn(msgs));
@@ -550,6 +558,10 @@ function SessionView({ profile, progress, initialSession, onClose }) {
     }
   }
 
+  // Repetição guiada (tag expectedRepeat) só entra com o seletor em FR — em PT, o aluno
+  // está usando o escape pra falar outra coisa (ex: "não entendi"), não repetindo.
+  const repeatTarget = lang === 'fr' ? session.pendingRepeat : null;
+
   function onMic() {
     if (phase === 'listening') return listenerRef.current?.finish();
     if (phase !== 'idle') return;
@@ -557,26 +569,7 @@ function SessionView({ profile, progress, initialSession, onClose }) {
     setError(null);
     setHeardText('');
     try {
-      const listener = new Listener({
-        lang: LANGS[lang].code,
-        onInterim: setHeardText,
-        onFinal: (text) => {
-          listenerRef.current = null;
-          setHeardText('');
-          setLang('fr'); // o seletor volta para francês depois de cada fala
-          if (!text) {
-            setPhase('idle');
-            return fail(new Error('Não ouvi nada. Toque no microfone e fale de novo.'));
-          }
-          sendStudentText(text);
-        },
-        onError: (err) => {
-          listenerRef.current = null;
-          setHeardText('');
-          setPhase('idle');
-          fail(err);
-        },
-      });
+      const listener = repeatTarget ? makeRepeatCapture(repeatTarget) : makeSpeechListener();
       listenerRef.current = listener;
       listener.start();
       setPhase('listening');
@@ -587,14 +580,68 @@ function SessionView({ profile, progress, initialSession, onClose }) {
     }
   }
 
-  function sendStudentText(text) {
+  function makeSpeechListener() {
+    return new Listener({
+      lang: LANGS[lang].code,
+      onInterim: setHeardText,
+      onFinal: (text) => {
+        listenerRef.current = null;
+        setHeardText('');
+        setLang('fr'); // o seletor volta para francês depois de cada fala
+        if (!text) {
+          setPhase('idle');
+          return fail(new Error('Não ouvi nada. Toque no microfone e fale de novo.'));
+        }
+        sendStudentText(text);
+      },
+      onError: (err) => {
+        listenerRef.current = null;
+        setHeardText('');
+        setPhase('idle');
+        fail(err);
+      },
+    });
+  }
+
+  // Repetição guiada: STT + confiança de pronúncia via AssemblyAI, em vez de Web Speech.
+  function makeRepeatCapture(expectedRepeat) {
+    return new RepeatCapture({
+      expectedRepeat,
+      onInterim: setHeardText,
+      onFinal: ({ transcript, media, piorPalavra }) => {
+        listenerRef.current = null;
+        setHeardText('');
+        persist({ ...sessionRef.current, pendingRepeat: null }); // já foi consumida
+        if (!transcript) {
+          setPhase('idle');
+          return fail(new Error('Não ouvi nada. Toque no microfone e repita de novo.'));
+        }
+        sendStudentText(transcript, pronunciationNote({ expectedRepeat, media, piorPalavra }));
+      },
+      onError: (err) => {
+        listenerRef.current = null;
+        setHeardText('');
+        persist({ ...sessionRef.current, pendingRepeat: null });
+        setPhase('idle');
+        fail(err);
+      },
+    });
+  }
+
+  // `hiddenNote`: contexto de pronúncia enviado ao professor mas nunca mostrado na tela.
+  function sendStudentText(text, hiddenNote = null) {
+    const content = hiddenNote ? `${text}\n${hiddenNote}` : text;
     const msgs = [...sessionRef.current.messages];
     const last = msgs[msgs.length - 1];
     // Se a resposta anterior do professor falhou, junta a nova fala à anterior.
     if (last?.role === 'user' && !last.hidden) {
-      msgs[msgs.length - 1] = { ...last, content: `${last.content}\n${text}` };
+      msgs[msgs.length - 1] = {
+        ...last,
+        content: `${last.content}\n${content}`,
+        display: `${last.display ?? last.content}\n${text}`,
+      };
     } else {
-      msgs.push({ role: 'user', content: text });
+      msgs.push({ role: 'user', content, display: text });
     }
     return teacherTurn(msgs);
   }
@@ -660,6 +707,8 @@ function SessionView({ profile, progress, initialSession, onClose }) {
   const status = phase === 'idle' && speaking ? 'speaking' : phase;
   const busy = ['thinking', 'ending'].includes(phase);
   const supported = isSpeechRecognitionSupported();
+  const repeatMode = Boolean(repeatTarget) && status === 'idle';
+  const idleLabel = repeatMode ? 'Toque e repita em voz alta o que o professor pediu' : PHASE_LABEL.idle;
   const visibleMessages = useMemo(() => session.messages.filter((m) => !m.hidden), [session.messages]);
 
   return (
@@ -698,7 +747,9 @@ function SessionView({ profile, progress, initialSession, onClose }) {
       )}
 
       <footer className="controls">
-        <p className={`status ${status}`}>{supported ? PHASE_LABEL[status] : UNSUPPORTED_MESSAGE}</p>
+        <p className={`status ${status}`}>
+          {!supported ? UNSUPPORTED_MESSAGE : status === 'idle' ? idleLabel : PHASE_LABEL[status]}
+        </p>
         <div className="mic-row">
           <div className="lang-toggle" role="group" aria-label="Idioma da fala">
             {Object.entries(LANGS).map(([key, { label }]) => (
@@ -714,7 +765,7 @@ function SessionView({ profile, progress, initialSession, onClose }) {
             ))}
           </div>
           <button
-            className={`mic ${status}`}
+            className={`mic ${status}${repeatMode ? ' repeat' : ''}`}
             onClick={onMic}
             disabled={busy || !supported}
             aria-label={phase === 'listening' ? 'Parar e enviar' : 'Falar'}

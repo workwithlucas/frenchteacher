@@ -75,6 +75,12 @@ export async function summarize(payload) {
   return res.json();
 }
 
+// Token curto pra abrir o WebSocket da AssemblyAI direto do navegador (repetição guiada).
+export async function getAssemblyAiToken() {
+  const res = await ensureOk(await fetch('/api/assemblyai-token', { method: 'POST', headers: headers() }));
+  return (await res.json()).token;
+}
+
 export async function correctWriting(payload) {
   const res = await ensureOk(
     await fetch('/api/correct-writing', {

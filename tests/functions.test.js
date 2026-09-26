@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 
 process.env.ANTHROPIC_API_KEY = 'test-anthropic';
 process.env.FISH_AUDIO_API_KEY = 'test-fish';
+process.env.ASSEMBLYAI_API_KEY = 'test-assemblyai';
 process.env.ANTHROPIC_BASE_URL = 'https://anthropic.test';
 
 const calls = [];
@@ -21,6 +22,7 @@ const { default: chat } = await import('../netlify/functions/chat.mjs');
 const { default: tts } = await import('../netlify/functions/tts.mjs');
 const { default: summarize } = await import('../netlify/functions/summarize.mjs');
 const { default: correctWriting } = await import('../netlify/functions/correct-writing.mjs');
+const { default: assemblyAiToken } = await import('../netlify/functions/assemblyai-token.mjs');
 const { teacherPromptVars, createInitialProgress } = await import('../shared/progress.js');
 const { STREAM_ERROR_MARKER } = await import('../shared/protocol.js');
 
@@ -224,4 +226,33 @@ test('variável de ambiente ausente gera mensagem clara', async () => {
   process.env.FISH_AUDIO_API_KEY = saved;
   assert.equal(res.status, 500);
   assert.match((await res.json()).error, /FISH_AUDIO_API_KEY/);
+});
+
+test('assemblyai-token: pede o token à AssemblyAI com a chave do servidor e devolve só o token', async () => {
+  routes['https://streaming.assemblyai.com/'] = () => Response.json({ token: 'tok-abc', expires_in_seconds: 60 });
+  const res = await assemblyAiToken(post('/api/assemblyai-token', {}));
+  assert.equal(res.status, 200);
+  assert.deepEqual(await res.json(), { token: 'tok-abc' });
+  assert.match(calls[0].url, /expires_in_seconds=60/);
+  assert.equal(calls[0].init.headers.Authorization, 'test-assemblyai');
+});
+
+test('assemblyai-token: repassa erro da AssemblyAI e respeita o código de acesso', async () => {
+  process.env.APP_ACCESS_CODE = 'segredo';
+  let res = await assemblyAiToken(post('/api/assemblyai-token', {}));
+  assert.equal(res.status, 401);
+
+  routes['https://streaming.assemblyai.com/'] = () => new Response('unauthorized', { status: 401 });
+  res = await assemblyAiToken(post('/api/assemblyai-token', {}, { 'x-access-code': 'segredo' }));
+  assert.equal(res.status, 401);
+  assert.match((await res.json()).error, /AssemblyAI/);
+});
+
+test('assemblyai-token: variável de ambiente ausente gera mensagem clara', async () => {
+  const saved = process.env.ASSEMBLYAI_API_KEY;
+  delete process.env.ASSEMBLYAI_API_KEY;
+  const res = await assemblyAiToken(post('/api/assemblyai-token', {}));
+  process.env.ASSEMBLYAI_API_KEY = saved;
+  assert.equal(res.status, 500);
+  assert.match((await res.json()).error, /ASSEMBLYAI_API_KEY/);
 });

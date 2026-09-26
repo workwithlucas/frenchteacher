@@ -10,6 +10,7 @@
   --teacher-bubble: #ffffff;
   --danger: #b3261e;
   --listening: #c8453b;
+  --repeat: #8a6d1a;
   color-scheme: light;
 }
 
@@ -26,6 +27,7 @@
     --teacher-bubble: #232932;
     --danger: #f2837a;
     --listening: #e2695f;
+    --repeat: #e0c46b;
     color-scheme: dark;
   }
 }
@@ -298,6 +300,12 @@ h2 {
 .mic.listening {
   background: var(--listening);
   animation: pulse 1.2s ease-in-out infinite;
+}
+
+/* Modo repetição guiada (tag expectedRepeat): pronúncia vai ser avaliada pela AssemblyAI. */
+.mic.repeat {
+  outline: 3px solid var(--repeat);
+  outline-offset: 3px;
 }
 
 @keyframes pulse {

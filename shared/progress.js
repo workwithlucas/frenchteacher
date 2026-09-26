@@ -101,10 +101,37 @@ export function extractAdvanceTag(text) {
   return { value, clean };
 }
 
-// Durante o streaming, nada a partir do início provável da tag pode ir pro TTS.
+// ---- Tag {"expectedRepeat": "<texto>"} na resposta do professor ----
+// Emitida quando ele pede pro aluno repetir uma palavra/frase específica (mesmo padrão
+// oculto do avancar_bloco). Aceita aspas e escapes internos porque é JSON de verdade.
+
+const EXPECTED_REPEAT_RE = /\{\s*"expectedRepeat"\s*:\s*"(?:\\.|[^"\\])*"\s*\}/gi;
+
+export function extractExpectedRepeat(text) {
+  let value = null;
+  const clean = text
+    .replace(EXPECTED_REPEAT_RE, (match) => {
+      try {
+        const parsed = JSON.parse(match);
+        if (typeof parsed.expectedRepeat === 'string' && parsed.expectedRepeat.trim()) {
+          value = parsed.expectedRepeat.trim();
+        }
+      } catch {
+        // tag malformada: ignora e deixa o texto ser removido mesmo assim
+      }
+      return '';
+    })
+    .replace(/[ \t]+\n/g, '\n')
+    .trim();
+  return { value, clean };
+}
+
+// Durante o streaming, nada a partir do início provável de uma tag oculta pode ir pro TTS.
 // Retorna o índice até onde o texto é seguro para falar.
 export function safeSpeakLength(text) {
-  const candidates = [text.indexOf('{'), text.search(/avan[cç]ar_bloco/i)].filter((i) => i >= 0);
+  const candidates = [text.indexOf('{'), text.search(/avan[cç]ar_bloco/i), text.search(/expectedrepeat/i)].filter(
+    (i) => i >= 0,
+  );
   return candidates.length ? Math.min(...candidates) : text.length;
 }
 
