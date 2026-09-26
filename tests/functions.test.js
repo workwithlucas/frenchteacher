@@ -127,8 +127,18 @@ test('tts: repassa texto e voz ao Fish Audio e devolve mp3', async () => {
   assert.equal(calls[0].init.headers.Authorization, 'Bearer test-fish');
 });
 
-test('summarize: devolve o resumo estruturado', async () => {
-  const out = { regra_ensinada: 'Nasais', novos_erros: ['troca un por um'], avancar_bloco: false };
+test('summarize: usa o Haiku e devolve resumo + Caderno estruturados', async () => {
+  const out = {
+    regra_ensinada: 'Nasais',
+    novos_erros: ['troca un por um'],
+    avancar_bloco: false,
+    caderno: {
+      cena: 'Café em Lyon.',
+      regra: 'As vogais nasais...',
+      exemplos: [{ frase: 'Un bon vin blanc.', nuance: 'três nasais seguidas' }],
+      pergunta_aberta: 'Quel vin tu préfères ?',
+    },
+  };
   routes['https://anthropic.test/v1/messages'] = () =>
     Response.json({ ...message, content: [{ type: 'text', text: JSON.stringify(out) }], stop_reason: 'end_turn' });
   const res = await summarize(
@@ -137,7 +147,32 @@ test('summarize: devolve o resumo estruturado', async () => {
   assert.equal(res.status, 200);
   assert.deepEqual(await res.json(), out);
   const sent = JSON.parse(calls[0].init.body);
+  assert.equal(sent.model, 'claude-haiku-4-5');
   assert.equal(sent.output_config.format.type, 'json_schema');
+  assert.ok(sent.output_config.format.schema.properties.caderno, 'schema inclui o Caderno');
+  assert.match(sent.system, /caderno/);
+});
+
+test('summarize: sessão sem regra nova devolve caderno null', async () => {
+  const out = { regra_ensinada: 'Revisão', novos_erros: [], avancar_bloco: false, caderno: null };
+  routes['https://anthropic.test/v1/messages'] = () =>
+    Response.json({ ...message, content: [{ type: 'text', text: JSON.stringify(out) }], stop_reason: 'end_turn' });
+  const res = await summarize(
+    post('/api/summarize', { bloco: 'Bloco 1: Fonética', errosRegistrados: [], tagProfessor: null, transcript: 'Aluno: oi' }),
+  );
+  assert.deepEqual(await res.json(), out);
+});
+
+test('chat continua no Sonnet', async () => {
+  routes['https://anthropic.test/v1/messages'] = () =>
+    sse([
+      { type: 'message_start', message },
+      { type: 'message_delta', delta: { stop_reason: 'end_turn', stop_sequence: null }, usage: { output_tokens: 0 } },
+      { type: 'message_stop' },
+    ]);
+  const vars = teacherPromptVars(createInitialProgress('Lucas'));
+  await (await chat(post('/api/chat', { vars, messages: [{ role: 'user', content: 'Oi' }] }))).text();
+  assert.equal(JSON.parse(calls[0].init.body).model, 'claude-sonnet-5');
 });
 
 test('variável de ambiente ausente gera mensagem clara', async () => {

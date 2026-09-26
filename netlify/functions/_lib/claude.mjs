@@ -1,7 +1,10 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { jsonError } from './http.mjs';
 
+// Conversa por voz (professor ao vivo).
 export const CLAUDE_MODEL = process.env.CLAUDE_MODEL || 'claude-sonnet-5';
+// Chamada de encerramento (resumo + Caderno).
+export const SUMMARY_MODEL = process.env.SUMMARY_MODEL || 'claude-haiku-4-5';
 
 const MAX_MESSAGES = 200;
 const MAX_CHARS_PER_MESSAGE = 8000;

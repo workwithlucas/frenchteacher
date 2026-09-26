@@ -354,3 +354,122 @@ h2 {
 .lang-toggle button:disabled {
   cursor: default;
 }
+
+/* ---- Abas e Caderno ---- */
+
+.tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+}
+
+.tabs button {
+  font: inherit;
+  flex: 1;
+  padding: 10px 0;
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.tabs button.on {
+  color: var(--text);
+  font-weight: 600;
+  border-bottom-color: var(--primary);
+}
+
+.empty {
+  padding: 8px 0;
+}
+
+.caderno {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.caderno-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.caderno-group h2 {
+  font-size: 1rem;
+  margin: 0;
+}
+
+.entry {
+  gap: 0;
+}
+
+.entry summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.entry summary::-webkit-details-marker {
+  display: none;
+}
+
+.entry summary::after {
+  content: '▾';
+  color: var(--muted);
+}
+
+.entry[open] summary::after {
+  content: '▴';
+}
+
+.entry-title {
+  font-weight: 600;
+  flex: 1;
+}
+
+.entry-date {
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.entry h3 {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin: 18px 0 6px;
+}
+
+.entry p {
+  margin: 0 0 8px;
+}
+
+.entry .fr {
+  font-style: italic;
+}
+
+.entry .small {
+  font-size: 0.85rem;
+}
+
+.examples {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.examples li {
+  border-left: 3px solid var(--border);
+  padding-left: 10px;
+}
+
+.examples li p {
+  margin: 0;
+}

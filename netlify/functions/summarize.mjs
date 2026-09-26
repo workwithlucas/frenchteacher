@@ -1,15 +1,26 @@
-// Pós-sessão: resume a sessão em regra ensinada + novos erros + avancar_bloco.
+// Pós-sessão: resume a sessão (regra ensinada, novos erros, avancar_bloco) e, se a
+// sessão ensinou regra nova, gera a entrada do Caderno — tudo no mesmo pedido.
+// Roda depois que a conversa por voz acabou, então usa o Haiku (mais barato): só
+// reorganiza por escrito o que a sessão (Sonnet) já ensinou.
 import Anthropic from '@anthropic-ai/sdk';
 import { z } from 'zod';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { SUMMARY_SYSTEM, buildSummaryUserMessage } from '../../shared/summaryPrompt.js';
 import { checkAccess, handleError, jsonError, methodGuard, requireEnv } from './_lib/http.mjs';
-import { anthropicErrorResponse, CLAUDE_MODEL } from './_lib/claude.mjs';
+import { anthropicErrorResponse, SUMMARY_MODEL } from './_lib/claude.mjs';
 
 const SummarySchema = z.object({
   regra_ensinada: z.string(),
   novos_erros: z.array(z.string()),
   avancar_bloco: z.boolean(),
+  caderno: z
+    .object({
+      cena: z.string(),
+      regra: z.string(),
+      exemplos: z.array(z.object({ frase: z.string(), nuance: z.string() })),
+      pergunta_aberta: z.string(),
+    })
+    .nullable(),
 });
 
 const MAX_TRANSCRIPT_CHARS = 400_000;
@@ -26,8 +37,8 @@ export default async (req) => {
     if (typeof bloco !== 'string' || !Array.isArray(errosRegistrados)) return jsonError(400, 'Dados inválidos.');
 
     const response = await client.messages.parse({
-      model: CLAUDE_MODEL,
-      max_tokens: 4000,
+      model: SUMMARY_MODEL,
+      max_tokens: 8000,
       system: SUMMARY_SYSTEM,
       messages: [
         {

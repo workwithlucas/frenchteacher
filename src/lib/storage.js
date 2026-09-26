@@ -42,3 +42,7 @@ export const loadLastProfileId = () => read(KEYS.lastProfile);
 export const saveLastProfileId = (id) => write(KEYS.lastProfile, id);
 export const loadAccessCode = () => read(KEYS.accessCode) ?? '';
 export const saveAccessCode = (code) => write(KEYS.accessCode, code || null);
+
+// Caderno: lista de entradas por aluno (uma por sessão que ensinou regra nova).
+export const loadCaderno = (profileId) => read(`ft.caderno.${profileId}`) ?? [];
+export const saveCaderno = (profileId, entries) => write(`ft.caderno.${profileId}`, entries);

@@ -1,5 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { PROFILES, loadProgress, saveProgress, loadSession, saveSession, loadLastProfileId, saveLastProfileId, loadAccessCode, saveAccessCode } from './lib/storage.js';
+import {
+  PROFILES,
+  loadProgress,
+  saveProgress,
+  loadSession,
+  saveSession,
+  loadLastProfileId,
+  saveLastProfileId,
+  loadAccessCode,
+  saveAccessCode,
+  loadCaderno,
+  saveCaderno,
+} from './lib/storage.js';
 import { ApiError, summarize } from './lib/api.js';
 import { LANGS, Listener, isSpeechRecognitionSupported } from './lib/speech.js';
 import { Speaker } from './lib/speaker.js';
@@ -7,6 +19,13 @@ import { runTeacherTurn } from './lib/teacherTurn.js';
 import { getBlock, describeBlock } from '../shared/curriculum.js';
 import { SESSION_OPENER } from '../shared/teacherPrompt.js';
 import { applySessionSummary, nivelAtual, recurringErrors, teacherPromptVars } from '../shared/progress.js';
+import {
+  createCadernoEntry,
+  groupByBlock,
+  markQuestionResumed,
+  pendingQuestion,
+  resumeQuestionNote,
+} from '../shared/caderno.js';
 
 const UNSUPPORTED_MESSAGE =
   'Este navegador não tem reconhecimento de voz nativo, então não dá para falar com o professor por aqui. Use o Chrome (Android ou computador) ou o Edge.';
@@ -99,6 +118,8 @@ function ProfileHome({ profile, onSwitch }) {
   const [session, setSession] = useState(() => loadSession(profile.id));
   const [active, setActive] = useState(false);
   const [result, setResult] = useState(null);
+  const [caderno, setCaderno] = useState(() => loadCaderno(profile.id));
+  const [tab, setTab] = useState('aula');
 
   const block = getBlock(progress.blocoId);
   const erros = recurringErrors(progress);
@@ -112,6 +133,8 @@ function ProfileHome({ profile, onSwitch }) {
         vars: teacherPromptVars(progress),
         blocoId: progress.blocoId,
         lastTag: null,
+        // Pergunta aberta pendente da última entrada do Caderno, retomada na abertura.
+        perguntaRetomada: pendingQuestion(caderno),
         messages: [],
       };
       saveSession(profile.id, fresh);
@@ -139,6 +162,7 @@ function ProfileHome({ profile, onSwitch }) {
             setResult(outcome);
           }
           setSession(loadSession(profile.id));
+          setCaderno(loadCaderno(profile.id));
         }}
       />
     );
@@ -153,57 +177,143 @@ function ProfileHome({ profile, onSwitch }) {
         </button>
       </header>
 
-      {result && <SummaryCard result={result} />}
+      <nav className="tabs" role="tablist">
+        <button
+          role="tab"
+          aria-selected={tab === 'aula'}
+          className={tab === 'aula' ? 'on' : ''}
+          onClick={() => setTab('aula')}
+        >
+          Aula
+        </button>
+        <button
+          role="tab"
+          aria-selected={tab === 'caderno'}
+          className={tab === 'caderno' ? 'on' : ''}
+          onClick={() => setTab('caderno')}
+        >
+          Caderno
+        </button>
+      </nav>
 
-      <section className="card">
-        <div className="kv">
-          <span>Nível</span>
-          <strong>{nivelAtual(progress)}</strong>
-        </div>
-        <div className="kv">
-          <span>Bloco</span>
-          <strong>
-            {block.id}. {block.titulo}
-          </strong>
-        </div>
-        <ul className="topics">
-          {block.topicos.map((t) => (
-            <li key={t}>{t}</li>
-          ))}
-        </ul>
-        <div className="kv">
-          <span>Última regra</span>
-          <span>{progress.ultimaRegra ?? '—'}</span>
-        </div>
-        <div className="kv">
-          <span>Erros recorrentes</span>
-          <span>{erros.length ? erros.join('; ') : '—'}</span>
-        </div>
-      </section>
-
-      {!isSpeechRecognitionSupported() && (
-        <p className="error" role="alert">
-          {UNSUPPORTED_MESSAGE}
-        </p>
-      )}
-
-      {session ? (
-        <div className="actions">
-          <button className="btn big primary" onClick={start} disabled={!isSpeechRecognitionSupported()}>
-            Continuar sessão em andamento
-          </button>
-          <button className="link danger" onClick={discard}>
-            Descartar sessão sem salvar
-          </button>
-        </div>
+      {tab === 'caderno' ? (
+        <CadernoView entries={caderno} />
       ) : (
-        <div className="actions">
-          <button className="btn big primary" onClick={start} disabled={!isSpeechRecognitionSupported()}>
-            Iniciar sessão
-          </button>
-        </div>
+        <>
+          {result && <SummaryCard result={result} />}
+
+          <section className="card">
+            <div className="kv">
+              <span>Nível</span>
+              <strong>{nivelAtual(progress)}</strong>
+            </div>
+            <div className="kv">
+              <span>Bloco</span>
+              <strong>
+                {block.id}. {block.titulo}
+              </strong>
+            </div>
+            <ul className="topics">
+              {block.topicos.map((t) => (
+                <li key={t}>{t}</li>
+              ))}
+            </ul>
+            <div className="kv">
+              <span>Última regra</span>
+              <span>{progress.ultimaRegra ?? '—'}</span>
+            </div>
+            <div className="kv">
+              <span>Erros recorrentes</span>
+              <span>{erros.length ? erros.join('; ') : '—'}</span>
+            </div>
+          </section>
+
+          {!isSpeechRecognitionSupported() && (
+            <p className="error" role="alert">
+              {UNSUPPORTED_MESSAGE}
+            </p>
+          )}
+
+          {session ? (
+            <div className="actions">
+              <button className="btn big primary" onClick={start} disabled={!isSpeechRecognitionSupported()}>
+                Continuar sessão em andamento
+              </button>
+              <button className="link danger" onClick={discard}>
+                Descartar sessão sem salvar
+              </button>
+            </div>
+          ) : (
+            <div className="actions">
+              <button className="btn big primary" onClick={start} disabled={!isSpeechRecognitionSupported()}>
+                Iniciar sessão
+              </button>
+            </div>
+          )}
+        </>
       )}
     </main>
+  );
+}
+
+const formatDate = (iso) =>
+  new Date(iso).toLocaleDateString('pt-BR', { day: 'numeric', month: 'short', year: 'numeric' });
+
+// Biblioteca de leitura: entradas agrupadas por bloco, mais recentes primeiro. Somente leitura.
+function CadernoView({ entries }) {
+  const groups = useMemo(() => groupByBlock(entries), [entries]);
+  if (!groups.length) {
+    return (
+      <p className="muted empty">
+        O Caderno ainda está vazio. Cada sessão que ensinar uma regra nova ganha aqui uma página para reler: a cena, a
+        regra por extenso, exemplos comentados e uma pergunta para a próxima aula.
+      </p>
+    );
+  }
+  return (
+    <div className="caderno">
+      {groups.map((g) => (
+        <section key={g.blocoId} className="caderno-group">
+          <h2>
+            <span className="muted">Fase {g.fase} · </span>Bloco {g.blocoId}: {g.blocoTitulo}
+          </h2>
+          {g.entries.map((e) => (
+            <details key={e.id} className="card entry">
+              <summary>
+                <span className="entry-title">{e.regraTitulo}</span>
+                <span className="muted entry-date">{formatDate(e.criadoEm)}</span>
+              </summary>
+              <h3>Cena</h3>
+              <p>{e.cena}</p>
+              <h3>A regra</h3>
+              {e.regra.split(/\n\s*\n/).map((par, i) => (
+                <p key={i}>{par}</p>
+              ))}
+              <h3>Exemplos</h3>
+              <ul className="examples">
+                {e.exemplos.map((ex, i) => (
+                  <li key={i}>
+                    <p lang="fr" className="fr">
+                      {ex.frase}
+                    </p>
+                    {ex.nuance && <p className="muted">{ex.nuance}</p>}
+                  </li>
+                ))}
+              </ul>
+              <h3>Para pensar até a próxima aula</h3>
+              <p lang="fr" className="fr">
+                {e.perguntaAberta}
+              </p>
+              <p className="muted small">
+                {e.perguntaStatus === 'retomada'
+                  ? 'Pergunta retomada numa aula seguinte.'
+                  : 'O professor retoma esta pergunta no começo da próxima aula.'}
+              </p>
+            </details>
+          ))}
+        </section>
+      ))}
+    </div>
   );
 }
 
@@ -220,6 +330,14 @@ function SummaryCard({ result }) {
       <div className="kv">
         <span>Erros observados</span>
         <span>{summary.novos_erros.length ? summary.novos_erros.join('; ') : 'nenhum'}</span>
+      </div>
+      <div className="kv">
+        <span>Caderno</span>
+        <span>
+          {result.cadernoEntry
+            ? `nova página: ${result.cadernoEntry.regraTitulo}`
+            : 'sem página nova (não houve regra nova)'}
+        </span>
       </div>
       <div className="kv">
         <span>Próxima sessão</span>
@@ -275,7 +393,10 @@ function SessionView({ profile, progress, initialSession, onClose }) {
     speaker.onSpeakingChange = setSpeaking;
     speaker.onError = (err) => fail(err);
     let wakeLock = null;
-    navigator.wakeLock?.request('screen').then((l) => (wakeLock = l)).catch(() => {});
+    navigator.wakeLock
+      ?.request('screen')
+      .then((l) => (wakeLock = l))
+      .catch(() => {});
     return () => {
       speaker.stop();
       speaker.onSpeakingChange = () => {};
@@ -293,7 +414,9 @@ function SessionView({ profile, progress, initialSession, onClose }) {
     openedRef.current = true;
     const msgs = sessionRef.current.messages;
     if (msgs.length === 0) {
-      teacherTurn([{ role: 'user', content: SESSION_OPENER, hidden: true }]);
+      const pq = sessionRef.current.perguntaRetomada;
+      const opener = pq ? `${SESSION_OPENER}\n${resumeQuestionNote(pq.pergunta)}` : SESSION_OPENER;
+      teacherTurn([{ role: 'user', content: opener, hidden: true }]);
     } else if (msgs[msgs.length - 1].role === 'user') {
       setRetry(() => () => teacherTurn(msgs));
     }
@@ -408,9 +531,18 @@ function SessionView({ profile, progress, initialSession, onClose }) {
         transcript,
       });
       const next = applySessionSummary(progress, summary);
+      const cadernoEntry = createCadernoEntry(summary, {
+        alunoId: profile.id,
+        alunoNome: profile.nome,
+        blocoId: current.blocoId ?? progress.blocoId,
+      });
+      let caderno = loadCaderno(profile.id);
+      if (current.perguntaRetomada) caderno = markQuestionResumed(caderno, current.perguntaRetomada.id);
+      if (cadernoEntry) caderno = [...caderno, cadernoEntry];
+      saveCaderno(profile.id, caderno);
       saveProgress(profile.id, next);
       saveSession(profile.id, null);
-      onClose({ summary, before: progress, progress: next });
+      onClose({ summary, before: progress, progress: next, cadernoEntry });
     } catch (err) {
       setPhase('idle');
       fail(err, () => endSession());
