@@ -140,8 +140,9 @@ desta fase.
      **Sem ele, qualquer pessoa com a URL consegue gastar suas chaves.**
    - `FISH_AUDIO_VOICE_ID`: ID de uma voz francesa escolhida em fish.audio (opcional; sem ele,
      usa a voz padrão da API)
-   - opcionais: `FISH_AUDIO_MODEL`, `CLAUDE_MODEL` (conversa, padrão `claude-sonnet-5`),
-     `SUMMARY_MODEL` (encerramento + Caderno, padrão `claude-haiku-4-5`)
+   - opcionais: `FISH_AUDIO_MODEL` (padrão `s2.1-pro-free`, gratuito e sem limite rígido de
+     créditos; troque só se quiser um modelo pago, ex: `s2.1-pro`), `CLAUDE_MODEL` (conversa,
+     padrão `claude-sonnet-5`), `SUMMARY_MODEL` (encerramento + Caderno, padrão `claude-haiku-4-5`)
 3. Faça um novo deploy depois de salvar as variáveis. Elas só entram em vigor no deploy seguinte.
 4. No celular, abra a URL e use "Adicionar à tela de início" para instalar como app.
    O microfone exige HTTPS, que o Netlify já fornece.
@@ -159,9 +160,10 @@ npx netlify dev          # app + functions em http://localhost:8888 (usa o .env)
 ## Custos (estimativa aproximada, confira os preços atuais)
 
 Por sessão de ~30 min: reconhecimento de fala sem custo (navegador), Claude Sonnet 5 ~US$ 0,20–0,40
-(o histórico é reenviado a cada turno, com cache de prompt ligado), e Fish Audio ~US$ 0,20–0,30
-(≈15 mil caracteres falados pelo professor). O encerramento com Caderno roda no Haiku e custa
-~US$ 0,01–0,03. Vocabulário, provérbio e revisão só aumentam um pouco os tokens de entrada, que ficam
-em cache durante a sessão. **Total: ~US$ 0,45–0,75 por sessão.** Cada correção de escrita enviada
-custa à parte ~US$ 0,01.
-Com US$ 50/mês para os dois, isso dá **~70–110 sessões de 30 min por mês no total**.
+(o histórico é reenviado a cada turno, com cache de prompt ligado), e Fish Audio no modelo
+gratuito `s2.1-pro-free` (sem custo, sem limite rígido de créditos). O encerramento com Caderno
+roda no Haiku e custa ~US$ 0,01–0,03. Vocabulário, provérbio e revisão só aumentam um pouco os
+tokens de entrada, que ficam em cache durante a sessão. **Total: ~US$ 0,20–0,45 por sessão.**
+Cada correção de escrita enviada custa à parte ~US$ 0,01.
+Com US$ 50/mês para os dois, isso dá **~110–250 sessões de 30 min por mês no total** — o
+principal custo real passa a ser o Claude, não mais o TTS.

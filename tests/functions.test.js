@@ -43,6 +43,7 @@ beforeEach(() => {
   routes = {};
   delete process.env.APP_ACCESS_CODE;
   delete process.env.FISH_AUDIO_VOICE_ID;
+  delete process.env.FISH_AUDIO_MODEL;
 });
 
 test('chat: monta o prompt no servidor e devolve o texto em streaming', async () => {
@@ -126,6 +127,14 @@ test('tts: repassa texto e voz ao Fish Audio e devolve mp3', async () => {
   assert.equal(sent.reference_id, 'voz-fr');
   assert.equal(sent.format, 'mp3');
   assert.equal(calls[0].init.headers.Authorization, 'Bearer test-fish');
+  assert.equal(calls[0].init.headers.model, 's2.1-pro-free', 'padrão gratuito, sem depender de env var');
+});
+
+test('tts: FISH_AUDIO_MODEL sobrepõe o padrão gratuito quando definida', async () => {
+  process.env.FISH_AUDIO_MODEL = 's2.1-pro';
+  routes['https://api.fish.audio/'] = () => new Response(new Uint8Array([9, 9]), { headers: { 'content-type': 'audio/mpeg' } });
+  await tts(post('/api/tts', { text: 'Bonjour' }));
+  assert.equal(calls[0].init.headers.model, 's2.1-pro');
 });
 
 test('summarize: usa o Haiku e devolve resumo + Caderno estruturados', async () => {

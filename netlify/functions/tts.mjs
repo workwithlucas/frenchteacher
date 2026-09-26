@@ -2,6 +2,8 @@
 import { checkAccess, handleError, jsonError, methodGuard, requireEnv } from './_lib/http.mjs';
 
 const MAX_CHARS = 2000;
+// Modelo gratuito da Fish Audio (sem limite rígido de créditos), mesma qualidade do s2-pro.
+const DEFAULT_MODEL = 's2.1-pro-free';
 
 export default async (req) => {
   const denied = methodGuard(req) ?? checkAccess(req);
@@ -16,8 +18,11 @@ export default async (req) => {
     const body = { text, format: 'mp3', mp3_bitrate: 64, latency: 'balanced' };
     if (process.env.FISH_AUDIO_VOICE_ID) body.reference_id = process.env.FISH_AUDIO_VOICE_ID;
 
-    const headers = { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' };
-    if (process.env.FISH_AUDIO_MODEL) headers.model = process.env.FISH_AUDIO_MODEL;
+    const headers = {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+      model: process.env.FISH_AUDIO_MODEL || DEFAULT_MODEL,
+    };
 
     const res = await fetch('https://api.fish.audio/v1/tts', {
       method: 'POST',
