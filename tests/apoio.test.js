@@ -52,8 +52,10 @@ test('vocabulário usado: palavra inteira, sem confundir com pedaço de palavra'
   ]);
 });
 
-test('provérbio: nenhum em A1; nível atual primeiro, depois anteriores; não repete', () => {
-  assert.equal(pickProverb(progress(), 'A1.2'), null);
+test('provérbio: nível atual primeiro, depois anteriores; não repete; esgotado → null', () => {
+  assert.equal(pickProverb(progress(), 'A1.2').expressao, 'Ça va ?');
+  const a1All = ['Ça va ?', 'Comme ci, comme ça.', "C'est la vie.", 'Il fait beau.'];
+  assert.equal(pickProverb(progress({ proverbiosUsados: a1All }), 'A1.1'), null, 'A1 esgotado não pega nível acima');
   assert.equal(pickProverb(progress(), 'A2.1').nivel, 'A2');
   assert.equal(pickProverb(progress(), 'B1.1').nivel, 'B1');
   const p1 = pickProverb(progress(), 'B1.1');
@@ -72,6 +74,9 @@ test('provérbio conta como usado só se entrou nos exemplos do Caderno', () => 
   assert.equal(proverbUsedInEntry(p, com2), true);
   assert.equal(proverbUsedInEntry(p, sem), false);
   assert.equal(proverbUsedInEntry(p, null), false);
+  const cava = { expressao: 'Ça va ?' };
+  assert.equal(proverbUsedInEntry(cava, entry('2026-09-01T00:00:00Z', 1, 'x', [{ frase: '— Ça va ? — Oui, ça va bien.', nuance: '' }])), true);
+  assert.equal(proverbUsedInEntry(cava, entry('2026-09-01T00:00:00Z', 1, 'x', [{ frase: 'Ça valait la peine.', nuance: '' }])), false);
   assert.equal(proverbUsedInEntry(p, com), false, 'forma conjugada não é detectada (limitação aceita)');
 });
 

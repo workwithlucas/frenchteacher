@@ -1,5 +1,11 @@
 {
   "descricao": "Provérbios e expressões idiomáticas francesas de domínio público (tradição popular, sem autoria/direito autoral). Usar como exemplo real de língua, não gerado pela IA.",
+  "A1": [
+    {"expressao": "Ça va ?", "traducao": "Tudo bem?", "uso": "Cumprimento do dia a dia, quase uma expressão fixa, não uma pergunta literal."},
+    {"expressao": "Comme ci, comme ça.", "traducao": "Mais ou menos.", "uso": "Resposta comum a 'ça va?' quando não está nem bem nem mal."},
+    {"expressao": "C'est la vie.", "traducao": "É a vida.", "uso": "Aceitar algo ruim ou inevitável, tom leve, muito usado até por quem não fala francês."},
+    {"expressao": "Il fait beau.", "traducao": "Está bonito (o tempo).", "uso": "Comentário fixo sobre o clima, base de qualquer pequena conversa (small talk)."}
+  ],
   "A2": [
     {"expressao": "Petit à petit, l'oiseau fait son nid.", "traducao": "Pouco a pouco, o passarinho faz o ninho.", "uso": "Equivalente a 'devagar se vai ao longe' — progresso lento e constante."},
     {"expressao": "Qui ne risque rien n'a rien.", "traducao": "Quem não arrisca não petisca.", "uso": "Incentivo a tentar, mesmo com medo de errar."},

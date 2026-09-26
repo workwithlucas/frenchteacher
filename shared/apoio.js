@@ -49,7 +49,7 @@ export function wordsUsedIn(text, palavras) {
 
 // ---- Provérbios ----
 
-// Primeiro item ainda não usado: nível atual primeiro, depois os anteriores. A1 não tem lista.
+// Primeiro item ainda não usado: nível atual primeiro, depois os anteriores.
 export function pickProverb(progress, nivel) {
   const current = LEVELS.indexOf(baseLevel(nivel));
   const used = new Set(supportState(progress).proverbiosUsados);
@@ -74,7 +74,8 @@ export function proverbUsedInEntry(proverbio, entry) {
   if (!proverbio || !entry) return false;
   // Expressões sem sujeito ("Poser un lapin à quelqu'un") podem vir conjugadas; compara pelo núcleo.
   const core = simplify(proverbio.expressao).replace(/ a quelqu'un$/, '');
-  return entry.exemplos.some((e) => simplify(e.frase).includes(core));
+  // Palavras inteiras: "ça va" não conta dentro de "ça valait".
+  return entry.exemplos.some((e) => ` ${simplify(e.frase)} `.includes(` ${core} `));
 }
 
 // ---- Revisão espaçada ----

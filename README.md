@@ -111,8 +111,7 @@ contexto. O prompt de sistema do professor não muda.
   palavras que apareceram nas falas do professor são marcadas como usadas. Quando todas as do nível
   já foram usadas, a lista recomeça.
 - **Provérbio/expressão** (`shared/data/proverbios-expressoes.json`): um item ainda não usado, do
-  nível atual ou de um anterior. O arquivo não tem itens A1, então os provérbios começam em A2
-  (bloco 7). O professor usa como um dos três exemplos se encaixar na cena. O Haiku recebe o mesmo
+  nível atual ou de um anterior, desde o A1. O professor usa como um dos três exemplos se encaixar na cena. O Haiku recebe o mesmo
   item e o inclui nos exemplos do Caderno se ele foi usado ou se encaixa. Ele só conta como usado
   (e não volta) se entrar no Caderno.
 - **Revisão espaçada:** a cada 5 regras novas no Caderno, a sessão seguinte recebe o resumo de uma
