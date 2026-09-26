@@ -32,12 +32,16 @@ functions e não tem custo de API.
 │   ├── teacherPrompt.js     # prompt de sistema do professor (texto exato) + preenchimento
 │   ├── summaryPrompt.js     # prompt do resumo pós-sessão
 │   ├── progress.js          # estado do aluno, erros recorrentes, tag avancar_bloco, corte de frases p/ TTS
-│   ├── caderno.js           # entradas do Caderno, pergunta pendente, agrupamento por bloco
+│   ├── caderno.js           # entradas do Caderno, pergunta pendente, agrupamento, escrita
+│   ├── apoio.js             # vocabulário por nível, provérbio, revisão espaçada
+│   ├── writingPrompt.js     # prompt da correção de escrita
+│   ├── data/                # vocabulario-frequencia.json, proverbios-expressoes.json (estáticos)
 │   └── protocol.js
 ├── netlify/functions/       # proxy serverless — as chaves de API ficam só aqui
 │   ├── chat.mjs             # POST /api/chat       → Claude (streaming de texto)
 │   ├── tts.mjs              # POST /api/tts        → Fish Audio (mp3)
 │   ├── summarize.mjs        # POST /api/summarize  → Claude Haiku (resumo + Caderno, saída estruturada)
+│   ├── correct-writing.mjs  # POST /api/correct-writing → Claude Haiku (correção da escrita)
 │   └── _lib/                # utilitários (código de acesso, erros, validação)
 ├── src/
 │   ├── App.jsx              # telas: perfil → início → sessão → resumo
@@ -87,6 +91,38 @@ exercícios, gabarito nem pontuação.
 - **Organização:** mais recentes primeiro, agrupadas por bloco e fase. Tocar numa entrada abre o
   conteúdo completo.
 
+### Expressão escrita
+
+Cada entrada do Caderno tem um convite de escrita ("Escreva 2-3 frases em francês sobre…"). O
+convite é gerado na mesma chamada de encerramento, sem custo extra. O aluno digita e, **só se
+quiser**, toca em "Enviar para correção". Isso dispara uma chamada separada ao Haiku
+(`/api/correct-writing`), que devolve a versão corrigida e uma explicação breve de cada erro. O
+texto e a correção ficam salvos na entrada, e "Escrever de novo" substitui os dois. A escrita
+não é obrigatória e não influencia o avanço de bloco.
+
+## Apoio à sessão de voz (vocabulário, provérbios, revisão)
+
+No início de cada sessão, o app acrescenta à mensagem oculta de abertura até três blocos de
+contexto. O prompt de sistema do professor não muda.
+
+- **Vocabulário** (`shared/data/vocabulario-frequencia.json`): as palavras do nível CECRL atual
+  (A1.1 e A1.2 usam a lista A1, e assim por diante) ainda não usadas pelo professor. O professor
+  deve priorizá-las em cenas e exemplos, sem apresentar lista nem fazer exercício. Ao encerrar, as
+  palavras que apareceram nas falas do professor são marcadas como usadas. Quando todas as do nível
+  já foram usadas, a lista recomeça.
+- **Provérbio/expressão** (`shared/data/proverbios-expressoes.json`): um item ainda não usado, do
+  nível atual ou de um anterior. O arquivo não tem itens A1, então os provérbios começam em A2
+  (bloco 7). O professor usa como um dos três exemplos se encaixar na cena. O Haiku recebe o mesmo
+  item e o inclui nos exemplos do Caderno se ele foi usado ou se encaixa. Ele só conta como usado
+  (e não volta) se entrar no Caderno.
+- **Revisão espaçada:** a cada 5 regras novas no Caderno, a sessão seguinte recebe o resumo de uma
+  regra de um bloco anterior (a mais antiga ainda não revisada, de preferência 2 blocos ou mais
+  atrás). O professor encaixa essa regra na cena de abertura como revisão natural, não como prova.
+  Ao encerrar a sessão, a regra fica marcada como revisada e a contagem recomeça.
+
+Se a sessão também tiver pergunta pendente do Caderno, todos esses contextos vão juntos na mesma
+abertura.
+
 ## Limitação conhecida: dados por aparelho
 
 Nesta fase não existe backend, então **o progresso e o Caderno ficam salvos só no aparelho** (no
@@ -126,5 +162,7 @@ npx netlify dev          # app + functions em http://localhost:8888 (usa o .env)
 Por sessão de ~30 min: reconhecimento de fala sem custo (navegador), Claude Sonnet 5 ~US$ 0,20–0,40
 (o histórico é reenviado a cada turno, com cache de prompt ligado), e Fish Audio ~US$ 0,20–0,30
 (≈15 mil caracteres falados pelo professor). O encerramento com Caderno roda no Haiku e custa
-~US$ 0,01–0,03. **Total: ~US$ 0,45–0,70 por sessão.**
+~US$ 0,01–0,03. Vocabulário, provérbio e revisão só aumentam um pouco os tokens de entrada, que ficam
+em cache durante a sessão. **Total: ~US$ 0,45–0,75 por sessão.** Cada correção de escrita enviada
+custa à parte ~US$ 0,01.
 Com US$ 50/mês para os dois, isso dá **~70–110 sessões de 30 min por mês no total**.

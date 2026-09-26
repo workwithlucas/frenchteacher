@@ -1,0 +1,22 @@
+{
+  "descricao": "Provérbios e expressões idiomáticas francesas de domínio público (tradição popular, sem autoria/direito autoral). Usar como exemplo real de língua, não gerado pela IA.",
+  "A2": [
+    {"expressao": "Petit à petit, l'oiseau fait son nid.", "traducao": "Pouco a pouco, o passarinho faz o ninho.", "uso": "Equivalente a 'devagar se vai ao longe' — progresso lento e constante."},
+    {"expressao": "Qui ne risque rien n'a rien.", "traducao": "Quem não arrisca não petisca.", "uso": "Incentivo a tentar, mesmo com medo de errar."},
+    {"expressao": "Avoir le cafard", "traducao": "Estar na fossa / desanimado", "uso": "Expressão de humor, informal, muito usada no dia a dia."},
+    {"expressao": "Poser un lapin à quelqu'un", "traducao": "Dar o bolo em alguém", "uso": "Não comparecer a um encontro combinado."}
+  ],
+  "B1": [
+    {"expressao": "Il ne faut pas vendre la peau de l'ours avant de l'avoir tué.", "traducao": "Não conte com o ovo dentro da galinha.", "uso": "Não comemorar antes da hora."},
+    {"expressao": "Chacun voit midi à sa porte.", "traducao": "Cada um pensa a partir da sua própria realidade.", "uso": "Usado em discussão, pra apontar visão egocêntrica de alguém."},
+    {"expressao": "Avoir un chat dans la gorge", "traducao": "Estar com a voz embargada/rouca", "uso": "Situação física comum, útil em conversa cotidiana."},
+    {"expressao": "Mettre la charrue avant les bœufs", "traducao": "Colocar o carro na frente dos bois", "uso": "Fazer as coisas fora de ordem."}
+  ],
+  "B2": [
+    {"expressao": "L'habit ne fait pas le moine.", "traducao": "O hábito não faz o monge.", "uso": "Aparência não define o caráter — comum em discurso mais formal/reflexivo."},
+    {"expressao": "Qui vivra verra.", "traducao": "Quem viver, verá.", "uso": "Incerteza sobre o futuro, tom levemente filosófico."},
+    {"expressao": "Ne pas y aller par quatre chemins", "traducao": "Não enrolar, ir direto ao ponto", "uso": "Registro assertivo, usado em contexto profissional."},
+    {"expressao": "Tirer son épingle du jeu", "traducao": "Sair-se bem de uma situação difícil", "uso": "Registro mais elaborado, comum em análise/argumentação."}
+  ],
+  "nota_de_uso": "Ao montar os 3-5 exemplos de uma sessão, incluir 1 item desta lista compatível com o nível atual, no lugar de um exemplo inventado — desde que se encaixe naturalmente na cena do dia. Não forçar se não houver encaixe."
+}

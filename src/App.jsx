@@ -12,19 +12,21 @@ import {
   loadCaderno,
   saveCaderno,
 } from './lib/storage.js';
-import { ApiError, summarize } from './lib/api.js';
+import { ApiError, correctWriting, summarize } from './lib/api.js';
 import { LANGS, Listener, isSpeechRecognitionSupported } from './lib/speech.js';
 import { Speaker } from './lib/speaker.js';
 import { runTeacherTurn } from './lib/teacherTurn.js';
 import { getBlock, describeBlock } from '../shared/curriculum.js';
 import { SESSION_OPENER } from '../shared/teacherPrompt.js';
 import { applySessionSummary, nivelAtual, recurringErrors, teacherPromptVars } from '../shared/progress.js';
+import { applySupportUsage, buildSessionSupport, supportNotes } from '../shared/apoio.js';
 import {
   createCadernoEntry,
   groupByBlock,
   markQuestionResumed,
   pendingQuestion,
   resumeQuestionNote,
+  saveWriting,
 } from '../shared/caderno.js';
 
 const UNSUPPORTED_MESSAGE =
@@ -135,6 +137,8 @@ function ProfileHome({ profile, onSwitch }) {
         lastTag: null,
         // Pergunta aberta pendente da última entrada do Caderno, retomada na abertura.
         perguntaRetomada: pendingQuestion(caderno),
+        // Vocabulário do nível, provérbio sugerido e revisão espaçada (se for a vez).
+        apoio: buildSessionSupport(progress, caderno, nivelAtual(progress)),
         messages: [],
       };
       saveSession(profile.id, fresh);
@@ -197,7 +201,14 @@ function ProfileHome({ profile, onSwitch }) {
       </nav>
 
       {tab === 'caderno' ? (
-        <CadernoView entries={caderno} />
+        <CadernoView
+          entries={caderno}
+          nivel={nivelAtual(progress)}
+          onChange={(next) => {
+            saveCaderno(profile.id, next);
+            setCaderno(next);
+          }}
+        />
       ) : (
         <>
           {result && <SummaryCard result={result} />}
@@ -260,7 +271,7 @@ const formatDate = (iso) =>
   new Date(iso).toLocaleDateString('pt-BR', { day: 'numeric', month: 'short', year: 'numeric' });
 
 // Biblioteca de leitura: entradas agrupadas por bloco, mais recentes primeiro. Somente leitura.
-function CadernoView({ entries }) {
+function CadernoView({ entries, nivel, onChange }) {
   const groups = useMemo(() => groupByBlock(entries), [entries]);
   if (!groups.length) {
     return (
@@ -309,10 +320,91 @@ function CadernoView({ entries }) {
                   ? 'Pergunta retomada numa aula seguinte.'
                   : 'O professor retoma esta pergunta no começo da próxima aula.'}
               </p>
+              <WritingBox
+                entry={e}
+                nivel={nivel}
+                onSaved={(texto, correcao) => onChange(saveWriting(entries, e.id, { texto, correcao }))}
+              />
             </details>
           ))}
         </section>
       ))}
+    </div>
+  );
+}
+
+// Expressão escrita: opcional. A correção (Haiku) só é pedida quando o aluno envia.
+function WritingBox({ entry, nivel, onSaved }) {
+  const [editing, setEditing] = useState(!entry.escrita);
+  const [texto, setTexto] = useState(entry.escrita?.texto ?? '');
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState(null);
+  const inputId = `escrita-${entry.id}`;
+
+  async function send(ev) {
+    ev.preventDefault();
+    const t = texto.trim();
+    if (!t) return;
+    setSending(true);
+    setError(null);
+    try {
+      const correcao = await correctWriting({
+        texto: t,
+        convite: entry.conviteEscrita,
+        regra: entry.regraTitulo,
+        nivel,
+      });
+      onSaved(t, correcao);
+      setEditing(false);
+    } catch (err) {
+      setError(err);
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <div className="writing">
+      <h3>Escrita</h3>
+      <label htmlFor={inputId}>{entry.conviteEscrita}</label>
+      {editing ? (
+        <form onSubmit={send}>
+          <textarea
+            id={inputId}
+            lang="fr"
+            rows={4}
+            maxLength={2000}
+            value={texto}
+            onChange={(ev) => setTexto(ev.target.value)}
+            disabled={sending}
+          />
+          {error && (
+            <p className="error" role="alert">
+              {error.message}
+            </p>
+          )}
+          <button className="btn small primary" type="submit" disabled={sending || !texto.trim()}>
+            {sending ? 'Corrigindo…' : 'Enviar para correção'}
+          </button>
+        </form>
+      ) : (
+        entry.escrita && (
+          <div className="correction">
+            <p className="muted small">Você escreveu:</p>
+            <p lang="fr" className="fr">
+              {entry.escrita.texto}
+            </p>
+            <p className="muted small">Versão corrigida:</p>
+            <p lang="fr" className="fr corrected">
+              {entry.escrita.correcao.versao_corrigida}
+            </p>
+            <p className="explanation">{entry.escrita.correcao.explicacao}</p>
+            <button className="link" onClick={() => setEditing(true)}>
+              Escrever de novo
+            </button>
+          </div>
+        )
+      )}
     </div>
   );
 }
@@ -415,7 +507,11 @@ function SessionView({ profile, progress, initialSession, onClose }) {
     const msgs = sessionRef.current.messages;
     if (msgs.length === 0) {
       const pq = sessionRef.current.perguntaRetomada;
-      const opener = pq ? `${SESSION_OPENER}\n${resumeQuestionNote(pq.pergunta)}` : SESSION_OPENER;
+      const opener = [
+        SESSION_OPENER,
+        ...(pq ? [resumeQuestionNote(pq.pergunta)] : []),
+        ...supportNotes(sessionRef.current.apoio),
+      ].join('\n');
       teacherTurn([{ role: 'user', content: opener, hidden: true }]);
     } else if (msgs[msgs.length - 1].role === 'user') {
       setRetry(() => () => teacherTurn(msgs));
@@ -528,13 +624,25 @@ function SessionView({ profile, progress, initialSession, onClose }) {
         bloco: describeBlock(current.blocoId ?? progress.blocoId),
         errosRegistrados: progress.errorLog.map((e) => e.erro),
         tagProfessor: current.lastTag ?? null,
+        proverbio: current.apoio?.proverbio ?? null,
         transcript,
       });
-      const next = applySessionSummary(progress, summary);
+      const now = new Date();
       const cadernoEntry = createCadernoEntry(summary, {
         alunoId: profile.id,
         alunoNome: profile.nome,
         blocoId: current.blocoId ?? progress.blocoId,
+        now,
+      });
+      const teacherText = visible
+        .filter((m) => m.role === 'assistant')
+        .map((m) => m.display ?? m.content)
+        .join('\n');
+      const next = applySupportUsage(applySessionSummary(progress, summary, now), {
+        apoio: current.apoio,
+        teacherText,
+        cadernoEntry,
+        now,
       });
       let caderno = loadCaderno(profile.id);
       if (current.perguntaRetomada) caderno = markQuestionResumed(caderno, current.perguntaRetomada.id);

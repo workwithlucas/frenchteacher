@@ -20,6 +20,7 @@ globalThis.fetch = async (input, init = {}) => {
 const { default: chat } = await import('../netlify/functions/chat.mjs');
 const { default: tts } = await import('../netlify/functions/tts.mjs');
 const { default: summarize } = await import('../netlify/functions/summarize.mjs');
+const { default: correctWriting } = await import('../netlify/functions/correct-writing.mjs');
 const { teacherPromptVars, createInitialProgress } = await import('../shared/progress.js');
 const { STREAM_ERROR_MARKER } = await import('../shared/protocol.js');
 
@@ -137,6 +138,7 @@ test('summarize: usa o Haiku e devolve resumo + Caderno estruturados', async () 
       regra: 'As vogais nasais...',
       exemplos: [{ frase: 'Un bon vin blanc.', nuance: 'três nasais seguidas' }],
       pergunta_aberta: 'Quel vin tu préfères ?',
+      convite_escrita: 'Escreva 2-3 frases em francês sobre o seu vinho preferido.',
     },
   };
   routes['https://anthropic.test/v1/messages'] = () =>
@@ -151,6 +153,37 @@ test('summarize: usa o Haiku e devolve resumo + Caderno estruturados', async () 
   assert.equal(sent.output_config.format.type, 'json_schema');
   assert.ok(sent.output_config.format.schema.properties.caderno, 'schema inclui o Caderno');
   assert.match(sent.system, /caderno/);
+  assert.ok(sent.output_config.format.schema.properties.caderno.anyOf[0].properties.convite_escrita);
+});
+
+test('summarize: provérbio sugerido vai para o Haiku', async () => {
+  const out = { regra_ensinada: 'x', novos_erros: [], avancar_bloco: false, caderno: null };
+  routes['https://anthropic.test/v1/messages'] = () =>
+    Response.json({ ...message, content: [{ type: 'text', text: JSON.stringify(out) }], stop_reason: 'end_turn' });
+  const proverbio = { expressao: 'Qui vivra verra.', traducao: 'Quem viver, verá.', uso: 'incerteza' };
+  await summarize(post('/api/summarize', { bloco: 'B', errosRegistrados: [], tagProfessor: null, proverbio, transcript: 'Aluno: oi' }));
+  assert.match(JSON.parse(calls[0].init.body).messages[0].content, /Provérbio sugerido para os exemplos: «Qui vivra verra\.»/);
+});
+
+test('correct-writing: Haiku corrige e devolve versão + explicação', async () => {
+  const out = { versao_corrigida: 'Je bois un café le matin.', explicacao: 'boi → bois: primeira pessoa de boire.' };
+  routes['https://anthropic.test/v1/messages'] = () =>
+    Response.json({ ...message, content: [{ type: 'text', text: JSON.stringify(out) }], stop_reason: 'end_turn' });
+  const res = await correctWriting(
+    post('/api/correct-writing', { texto: 'Je boi un café le matin.', convite: 'Escreva...', regra: 'Presente', nivel: 'A1.1' }),
+  );
+  assert.deepEqual(await res.json(), out);
+  const sent = JSON.parse(calls[0].init.body);
+  assert.equal(sent.model, 'claude-haiku-4-5');
+  assert.match(sent.messages[0].content, /Texto do aluno:\nJe boi un café/);
+});
+
+test('correct-writing: recusa texto vazio ou longo demais sem chamar a API', async () => {
+  let res = await correctWriting(post('/api/correct-writing', { texto: '  ', convite: 'c', regra: 'r', nivel: 'A1.1' }));
+  assert.equal(res.status, 400);
+  res = await correctWriting(post('/api/correct-writing', { texto: 'x'.repeat(2001), convite: 'c', regra: 'r', nivel: 'A1.1' }));
+  assert.equal(res.status, 400);
+  assert.equal(calls.length, 0);
 });
 
 test('summarize: sessão sem regra nova devolve caderno null', async () => {

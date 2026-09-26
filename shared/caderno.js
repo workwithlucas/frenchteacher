@@ -27,7 +27,19 @@ export function createCadernoEntry(summary, { alunoId, alunoNome, blocoId, now =
       .map((e) => ({ frase: e.frase.trim(), nuance: (e.nuance ?? '').trim() })),
     perguntaAberta: c.pergunta_aberta.trim(),
     perguntaStatus: 'pendente',
+    conviteEscrita: c.convite_escrita?.trim() || DEFAULT_WRITING_INVITE,
+    // Preenchido quando o aluno envia um texto: { texto, enviadoEm, correcao: { versao_corrigida, explicacao } }
+    escrita: null,
   };
+}
+
+// Entradas criadas antes do convite de escrita existir usam este texto.
+export const DEFAULT_WRITING_INVITE = 'Escreva 2-3 frases em francês sobre a cena desta página, usando a regra do dia.';
+
+export function saveWriting(entries, entryId, { texto, correcao, now = new Date() }) {
+  return entries.map((e) =>
+    e.id === entryId ? { ...e, escrita: { texto, enviadoEm: now.toISOString(), correcao } } : e,
+  );
 }
 
 // Mais recente primeiro.

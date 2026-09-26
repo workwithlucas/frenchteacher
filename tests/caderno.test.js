@@ -57,3 +57,14 @@ test('agrupa por bloco, mais recente primeiro', () => {
 test('nota de retomada leva a pergunta para a abertura', () => {
   assert.match(resumeQuestionNote('Tu aimes le café ?'), /«Tu aimes le café \?».*cena de abertura/);
 });
+
+test('escrita: convite vem do Caderno e o texto + correção ficam na entrada', async () => {
+  const { saveWriting, DEFAULT_WRITING_INVITE } = await import('../shared/caderno.js');
+  const e = createCadernoEntry(summary({ caderno: { ...caderno, convite_escrita: 'Escreva 2-3 frases em francês sobre seu café.' } }), ctx('2026-09-26T10:00:00Z'));
+  assert.equal(e.conviteEscrita, 'Escreva 2-3 frases em francês sobre seu café.');
+  assert.equal(e.escrita, null);
+  assert.equal(createCadernoEntry(summary(), ctx('2026-09-26T10:00:00Z')).conviteEscrita, DEFAULT_WRITING_INVITE);
+  const correcao = { versao_corrigida: 'Je bois un café.', explicacao: 'boi → bois: 1ª pessoa.' };
+  const [saved] = saveWriting([e], e.id, { texto: 'Je boi un café.', correcao, now: new Date('2026-09-27T08:00:00Z') });
+  assert.deepEqual(saved.escrita, { texto: 'Je boi un café.', enviadoEm: '2026-09-27T08:00:00.000Z', correcao });
+});

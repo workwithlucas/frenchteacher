@@ -74,3 +74,14 @@ export async function summarize(payload) {
   );
   return res.json();
 }
+
+export async function correctWriting(payload) {
+  const res = await ensureOk(
+    await fetch('/api/correct-writing', {
+      method: 'POST',
+      headers: headers({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(payload),
+    }),
+  );
+  return res.json();
+}

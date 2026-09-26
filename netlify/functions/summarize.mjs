@@ -19,6 +19,7 @@ const SummarySchema = z.object({
       regra: z.string(),
       exemplos: z.array(z.object({ frase: z.string(), nuance: z.string() })),
       pergunta_aberta: z.string(),
+      convite_escrita: z.string(),
     })
     .nullable(),
 });
@@ -31,10 +32,11 @@ export default async (req) => {
 
   try {
     const client = new Anthropic({ apiKey: requireEnv('ANTHROPIC_API_KEY') });
-    const { bloco, errosRegistrados = [], tagProfessor = null, transcript } = await req.json();
+    const { bloco, errosRegistrados = [], tagProfessor = null, proverbio = null, transcript } = await req.json();
     if (typeof transcript !== 'string' || !transcript.trim()) return jsonError(400, 'Transcrição vazia.');
     if (transcript.length > MAX_TRANSCRIPT_CHARS) return jsonError(400, 'Transcrição longa demais.');
     if (typeof bloco !== 'string' || !Array.isArray(errosRegistrados)) return jsonError(400, 'Dados inválidos.');
+    if (proverbio !== null && typeof proverbio?.expressao !== 'string') return jsonError(400, 'Provérbio inválido.');
 
     const response = await client.messages.parse({
       model: SUMMARY_MODEL,
@@ -43,7 +45,7 @@ export default async (req) => {
       messages: [
         {
           role: 'user',
-          content: buildSummaryUserMessage({ bloco, errosRegistrados, tagProfessor, transcript }),
+          content: buildSummaryUserMessage({ bloco, errosRegistrados, tagProfessor, proverbio, transcript }),
         },
       ],
       output_config: { format: zodOutputFormat(SummarySchema) },

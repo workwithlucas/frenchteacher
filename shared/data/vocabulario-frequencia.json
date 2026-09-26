@@ -1,0 +1,30 @@
+{
+  "descricao": "Vocabulário essencial de francês, organizado por nível CECRL. Lista inicial de núcleo (top ~300 palavras/expressões mais usadas no cotidiano). Extensível por bloco conforme o currículo avança.",
+  "A1": {
+    "pronomes_e_verbos_base": ["je", "tu", "il", "elle", "nous", "vous", "ils", "elles", "être", "avoir", "aller", "faire", "vouloir", "pouvoir", "devoir", "savoir", "venir", "voir", "dire", "prendre"],
+    "cotidiano": ["bonjour", "bonsoir", "merci", "s'il vous plaît", "excusez-moi", "oui", "non", "peut-être", "aujourd'hui", "demain", "hier", "maintenant", "toujours", "jamais", "beaucoup", "un peu", "très", "aussi", "encore", "déjà"],
+    "familia_e_pessoas": ["famille", "père", "mère", "fils", "fille", "frère", "sœur", "mari", "femme", "enfant", "ami", "voisin"],
+    "numeros_e_tempo": ["un", "deux", "trois", "dix", "vingt", "cent", "jour", "semaine", "mois", "année", "heure", "minute", "matin", "après-midi", "soir", "nuit"],
+    "lugares": ["maison", "école", "travail", "ville", "rue", "magasin", "restaurant", "hôpital", "gare", "aéroport"],
+    "adjetivos_base": ["grand", "petit", "bon", "mauvais", "beau", "nouveau", "vieux", "content", "fatigué", "difficile", "facile"]
+  },
+  "A2": {
+    "conectores": ["parce que", "donc", "mais", "ou", "et", "alors", "puis", "ensuite", "d'abord", "enfin"],
+    "verbos_uteis": ["penser", "croire", "sembler", "trouver", "chercher", "aider", "expliquer", "demander", "répondre", "comprendre", "apprendre", "connaître", "rencontrer", "acheter", "payer", "travailler", "habiter", "déménager"],
+    "trabalho_e_estudo": ["emploi", "entretien", "candidature", "salaire", "collègue", "réunion", "cours", "examen", "diplôme", "formation"],
+    "sentimentos": ["heureux", "triste", "content", "inquiet", "surpris", "fâché", "fier", "gêné"],
+    "expressoes_uteis": ["avoir besoin de", "avoir envie de", "avoir peur de", "avoir raison", "avoir tort", "il y a", "il faut", "ça va", "ça dépend"]
+  },
+  "B1": {
+    "argumentacao": ["cependant", "néanmoins", "en effet", "par conséquent", "d'ailleurs", "en revanche", "malgré", "bien que", "quoique", "tandis que"],
+    "administracao_e_imigracao": ["formulaire", "dossier", "rendez-vous", "démarche", "autorisation", "attestation", "justificatif", "guichet", "délai", "convocation"],
+    "verbos_pronominais_avancados": ["s'inquiéter", "se débrouiller", "se plaindre", "s'habituer", "se rendre compte", "s'attendre à"],
+    "opiniao": ["à mon avis", "je pense que", "il me semble que", "je suis d'accord", "je ne suis pas d'accord", "d'un côté... de l'autre côté"]
+  },
+  "B2": {
+    "conectores_avancados": ["de plus", "en outre", "toutefois", "or", "dès lors", "quand bien même", "en dépit de", "nonobstant"],
+    "registro_formal": ["il convient de", "il s'avère que", "force est de constater", "dans la mesure où", "eu égard à"],
+    "nuance": ["plutôt", "assez", "tout à fait", "dans une certaine mesure", "en quelque sorte", "pour ainsi dire"]
+  },
+  "nota_de_uso": "Injetar no contexto da sessão apenas as palavras do nível atual do aluno (nivel_atual), como referência de vocabulário prioritário — não como lista a decorar, mas como banco de palavras que o professor deve priorizar ao montar exemplos e cenas."
+}
